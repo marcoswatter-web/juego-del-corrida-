@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Subway Runner 3D</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #87CEEB;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        #hud {
+            display: flex;
+            justify-content: space-between;
+            padding: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+        }
+        /* Estilo dos botões de controle na tela */
+        #controls-pad {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding: 25px;
+            width: 100%;
+            box-sizing: border-box;
+            pointer-events: none;
+        }
+        .control-group {
+            display: flex;
+            gap: 15px;
+            pointer-events: auto;
+        }
+        .control-group-vertical {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            pointer-events: auto;
+        }
+        .arrow-btn {
+            width: 65px;
+            height: 65px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.25);
+            border: 3px solid rgba(255, 255, 255, 0.7);
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: transform 0.1s, background 0.1s;
+            padding: 0;
+        }
+        .arrow-btn:active {
+            transform: scale(0.9);
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        /* Telas de Início e Game Over */
+        #start-screen, #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.65);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            pointer-events: auto;
+            text-align: center;
+            z-index: 10;
+        }
+        h1 {
+            font-size: 48px;
+            margin-bottom: 10px;
+            color: #FFD700;
+            text-shadow: 3px 3px 0px #d35400;
+        }
+        p {
+            font-size: 18px;
+            margin-bottom: 30px;
+            max-width: 80%;
+        }
+        .menu-btn {
+            padding: 15px 40px;
+            font-size: 22px;
+            font-weight: bold;
+            color: white;
+            background-color: #2ecc71;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #27ae60;
+            transition: transform 0.1s;
+        }
+        .menu-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #27ae60;
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div id="hud">
+            <div>Pontos: <span id="score">0</span></div>
+            <div>Moedas: <span id="coins">0</span></div>
+        </div>
+
+        <!-- Botões de Setas na Tela -->
+        <div id="controls-pad" class="hidden">
+            <div class="control-group">
+                <button class="arrow-btn" id="btn-left" aria-label="Esquerda">◀</button>
+                <button class="arrow-btn" id="btn-right" aria-label="Direita">▶</button>
+            </div>
+            <div class="control-group-vertical">
+                <button class="arrow-btn" id="btn-up" aria-label="Pular">▲</button>
+                <button class="arrow-btn" id="btn-down" aria-label="Deslizar">▼</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="start-screen">
+        <h1>SUBWAY RUNNER 3D</h1>
+        <p>Use os botões na tela, as setas do teclado ou deslize o dedo para desviar dos trens!</p>
+        <button class="menu-btn" id="start-btn">JOGAR</button>
+    </div>
+
+    <div id="game-over-screen" class="hidden">
+        <h1>FIM DE JOGO!</h1>
+        <p>Pontuação Final: <span id="final-score">0</span><br>Moedas Coletadas: <span id="final-coins">0</span></p>
+        <button class="menu-btn" id="restart-btn">JOGAR NOVAMENTE</button>
+    </div>
+
+    <!-- Importando Three.js via CDN -->
+    <script src="https://cloudflare.com"></script>
+
+    <script>
+        // --- CONFIGURAÇÕES DO JOGO ---
+        const LANE_WIDTH = 3.2;
+        const LANES = [-LANE_WIDTH, 0, LANE_WIDTH];
+        const BASE_SPEED = 0.45;
+        const MAX_SPEED = 1.1;
+        const GRAVITY = -0.025;
+        const JUMP_FORCE = 0.45;
+
+        // --- VARIÁVEIS DE ESTADO ---
+        let scene, camera, renderer;
+        let player, playerBox;
+        let currentLane = 1;
+        let targetX = 0;
+        let velocityY = 0;
+        let isJumping = false;
+        let isSliding = false;
+        let slideTimer = 0;
+        
+        let gameActive = false;
+        let score = 0;
+        let coins = 0;
+        let gameSpeed = BASE_SPEED;
+        
+        let obstacles = [];
+        let coinObjects = [];
+        let tracks = [];
+        let spawnTimer = 0;
+
+        // --- ELEMENTOS DA UI ---
+        const scoreEl = document.getElementById('score');
+        const coinsEl = document.getElementById('coins');
+        const finalScoreEl = document.getElementById('final-score');
+        const finalCoinsEl = document.getElementById('final-coins');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const controlsPad = document.getElementById('controls-pad');
+
+        // --- INICIALIZAÇÃO ---
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            scene.fog = new THREE.Fog(0x87CEEB, 30, 110);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 150);
+            camera.position.set(0, 6.5, 11);
+            camera.lookAt(0, 2, -10);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Iluminação
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(15, 30, 20);
+            dirLight.castShadow = true;
+            dirLight.shadow.camera.left = -20;
+            dirLight.shadow.camera.right = 20;
+            dirLight.shadow.camera.top = 20;
+            dirLight.shadow.camera.bottom = -20;
+            scene.add(dirLight);
+
+            createEnvironment();
+            createPlayer();
+            setupControls();
+
+            window.addEventListener('resize', onWindowResize);
+            document.getElementById('start-btn').addEventListener('click', startGame);
+            document.getElementById('restart-btn').addEventListener('click', startGame);
+
+            animate();
+        }
+
+        // --- CRIAÇÃO DO CENÁRIO ---
+        function createEnvironment() {
+            const groundGeo = new THREE.PlaneGeometry(40, 200);
+            const groundMat = new THREE.MeshLambertMaterial({ color: 0x555555 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.z = -70;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            const grassGeo = new THREE.PlaneGeometry(60, 200);
+            const grassMat = new THREE.MeshLambertMaterial({ color: 0x2ecc71 });
+            
+            const leftGrass = new THREE.Mesh(grassGeo, grassMat);
+            leftGrass.rotation.x = -Math.PI / 2;
+            leftGrass.position.set(-40, 0.05, -70);
+            scene.add(leftGrass);
+
+            const rightGrass = new THREE.Mesh(grassGeo, grassMat);
+            rightGrass.rotation.x = -Math.PI / 2;
+            rightGrass.position.set(40, 0.05, -70);
+            scene.add(rightGrass);
+
+            const railMat = new THREE.MeshStandardMaterial({ color: 0xbdc3c7, metalness: 0.6, roughness: 0.4 });
+            const woodMat = new THREE.MeshLambertMaterial({ color: 0x6e472b });
+
+            LANES.forEach(laneX => {
+                const railGeo = new THREE.BoxGeometry(0.15, 0.15, 200);
+                const leftRail = new THREE.Mesh(railGeo, railMat);
+                leftRail.position.set(laneX - 0.7, 0.08, -70);
+                scene.add(leftRail);
+
+                const rightRail = new THREE.Mesh(railGeo, railMat);
+                rightRail.position.set(laneX + 0.7, 0.08, -70);
+                scene.add(rightRail);
+
+                for (let z = 10; z > -150; z -= 2) {
+                    const woodGeo = new THREE.BoxGeometry(2.2, 0.08, 0.4);
+                    const wood = new THREE.Mesh(woodGeo, woodMat);
+                    wood.position.set(laneX, 0.04, z);
+                    scene.add(wood);
+                    tracks.push(wood);
